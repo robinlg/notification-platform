@@ -71,6 +71,7 @@ enum ErrorCode {
   // 未知渠道类型
   UNKNOWN_CHANNEL = 16;
 }
+
 // 通知发送策略定义
 message SendStrategy {
   oneof strategy_type {
@@ -112,7 +113,6 @@ message SendStrategy {
   }
 }
 
-
 service NotificationService {
   // 同步单条发送
   rpc SendNotification(SendNotificationRequest) returns (SendNotificationResponse);
@@ -121,10 +121,10 @@ service NotificationService {
   rpc SendNotificationAsync(SendNotificationAsyncRequest) returns (SendNotificationAsyncResponse);
 
   // 同步批量发送
-  rpc BatchSendNotification(BatchSendNotificationsRequest) returns (BatchSendNotificationsResponse);
+  rpc BatchSendNotifications(BatchSendNotificationsRequest) returns (BatchSendNotificationsResponse);
 
   // 异步批量发送
-  rpc BatchSendNotificationAsync(BatchSendNotificationsAsyncRequest) returns (BatchSendNotificationsAsyncResponse);
+  rpc BatchSendNotificationsAsync(BatchSendNotificationsAsyncRequest) returns (BatchSendNotificationsAsyncResponse);
 
   // 准备事务
   rpc TxPrepare(TxPrepareRequest) returns (TxPrepareResponse);
