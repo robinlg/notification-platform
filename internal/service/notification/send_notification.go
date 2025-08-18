@@ -18,6 +18,8 @@ import (
 type SendService interface {
 	// SendNotification 同步单条发送
 	SendNotification(ctx context.Context, n domain.Notification) (domain.SendResponse, error)
+	// SendNotificationAsync 异步单条发送
+	SendNotificationAsync(ctx context.Context, n domain.Notification) (domain.SendResponse, error)
 }
 
 // sendService 执行器实现
@@ -61,4 +63,20 @@ func (e *sendService) SendNotification(ctx context.Context, n domain.Notificatio
 	}
 
 	return response, nil
+}
+
+// SendNotificationAsync 异步单条发送
+func (e *sendService) SendNotificationAsync(ctx context.Context, n domain.Notification) (domain.SendResponse, error) {
+	// 参数校验
+	if err := n.Validate(); err != nil {
+		return domain.SendResponse{}, err
+	}
+	// 生成通知ID
+	id := e.idGenerator.GenerateID(n.BizID, n.Key)
+	n.ID = uint64(id)
+
+	// 使用异步接口但要立即发送，修改为延时发送
+	// 本质上这是一个不怎好的用法，但是业务方可能不清楚，所以我们兼容一下
+	n.ReplaceAsyncImmediate()
+	return e.sendStrategy.Send(ctx, n)
 }

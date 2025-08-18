@@ -56,6 +56,18 @@ func (n *Notification) SetSendTime() {
 	n.ScheduledETime = etime
 }
 
+func (n *Notification) IsImmediate() bool {
+	return n.SendStrategyConfig.Type == SendStrategyImmediate
+}
+
+// ReplaceAsyncImmediate 如果是是立刻发送，就修改为默认的策略
+func (n *Notification) ReplaceAsyncImmediate() {
+	if n.IsImmediate() {
+		n.SendStrategyConfig.DeadlineTime = time.Now().Add(time.Minute)
+		n.SendStrategyConfig.Type = SendStrategyDeadline
+	}
+}
+
 func (n *Notification) Validate() error {
 	if n.BizID <= 0 {
 		return fmt.Errorf("%w: BizID = %d", errs.ErrInvalidParameter, n.BizID)

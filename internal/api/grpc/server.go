@@ -163,3 +163,41 @@ func (s *NotificationServer) convertToGRPCErrorCode(err error) notificationv1.Er
 		return notificationv1.ErrorCode_ERROR_CODE_UNSPECIFIED
 	}
 }
+
+// SendNotificationAsync 处理异步发送通知请求
+func (s *NotificationServer) SendNotificationAsync(ctx context.Context, req *notificationv1.SendNotificationAsyncRequest) (*notificationv1.SendNotificationAsyncResponse, error) {
+	response := &notificationv1.SendNotificationAsyncResponse{}
+
+	// 从metadata中解析Authorization JWT Token
+	bizID, err := jwt.GetBizIDFromContext(ctx)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+
+	// 构建领域对象
+	notification, err := s.buildNotification(ctx, req.Notification, bizID)
+	if err != nil {
+		response.ErrorCode = notificationv1.ErrorCode_INVALID_PARAMETER
+		response.ErrorMessage = err.Error()
+		return response, nil
+	}
+
+	// 执行发送
+	result, err := s.sendSvc.SendNotificationAsync(ctx, notification)
+	if err != nil {
+		// 区分系统错误和业务错误
+		if s.isSystemError(err) {
+			// 系统错误通过gRPC错误返回
+			return nil, status.Errorf(codes.Internal, "%v", err)
+		} else {
+			// 业务错误通过ErrorCode返回
+			response.ErrorCode = s.convertToGRPCErrorCode(err)
+			response.ErrorMessage = err.Error()
+			return response, nil
+		}
+	}
+
+	// 将结果转换为响应
+	response.NotificationId = result.NotificationID
+	return response, nil
+}
