@@ -9,8 +9,20 @@ import (
 
 // ChannelTemplateRepository 提供模版数据储存的仓库接口
 type ChannelTemplateRepository interface {
+	// 模版相关方法
+
 	// GetTemplateByID 根据ID获取模板
 	GetTemplateByID(ctx context.Context, templateID int64) (domain.ChannelTemplate, error)
+
+	// 模版版本相关方法
+
+	// GetTemplateVersionByID 根据ID获取模板版本
+	GetTemplateVersionByID(ctx context.Context, versionID int64) (domain.ChannelTemplateVersion, error)
+
+	// 供应商相关方法
+
+	// GetProviderByNameAndChannel 根据名称和渠道获取供应商
+	GetProviderByNameAndChannel(ctx context.Context, templateID, versionID int64, providerName string, channel domain.Channel) ([]domain.ChannelTemplateProvider, error)
 }
 
 // channelTemplateRepository 实现了ChannelTemplateRepository接口，提供模板数据的存储实现
@@ -141,4 +153,35 @@ func (r *channelTemplateRepository) toProviderDomain(daoProvider dao.ChannelTemp
 		Ctime:                    daoProvider.Ctime,
 		Utime:                    daoProvider.Utime,
 	}
+}
+
+func (r *channelTemplateRepository) GetTemplateVersionByID(ctx context.Context, versionID int64) (domain.ChannelTemplateVersion, error) {
+	version, err := r.dao.GetTemplateVersionByID(ctx, versionID)
+	if err != nil {
+		return domain.ChannelTemplateVersion{}, err
+	}
+	providers, err := r.dao.GetProvidersByVersionIDs(ctx, []int64{versionID})
+	if err != nil {
+		return domain.ChannelTemplateVersion{}, err
+	}
+	domainProviders := make([]domain.ChannelTemplateProvider, 0, len(providers))
+	for i := range providers {
+		domainProviders = append(domainProviders, r.toProviderDomain(providers[i]))
+	}
+
+	domainVersion := r.toVersionDomain(version)
+	domainVersion.Providers = domainProviders
+	return domainVersion, nil
+}
+
+func (r *channelTemplateRepository) GetProviderByNameAndChannel(ctx context.Context, templateID, versionID int64, providerName string, channel domain.Channel) ([]domain.ChannelTemplateProvider, error) {
+	providers, err := r.dao.GetProviderByNameAndChannel(ctx, templateID, versionID, providerName, channel.String())
+	if err != nil {
+		return nil, err
+	}
+	results := make([]domain.ChannelTemplateProvider, len(providers))
+	for i := range providers {
+		results[i] = r.toProviderDomain(providers[i])
+	}
+	return results, nil
 }

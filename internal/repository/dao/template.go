@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/ego-component/egorm"
+	"github.com/robinlg/notification-platform/internal/domain"
 	"github.com/robinlg/notification-platform/internal/errs"
 	"gorm.io/gorm"
 )
@@ -85,11 +86,15 @@ type ChannelTemplateDAO interface {
 
 	// GetTemplateVersionsByTemplateIDs 根据模板ID列表获取对应的版本列表
 	GetTemplateVersionsByTemplateIDs(ctx context.Context, templateIDs []int64) ([]ChannelTemplateVersion, error)
+	// GetTemplateVersionByID 根据ID获取模板版本
+	GetTemplateVersionByID(ctx context.Context, versionID int64) (ChannelTemplateVersion, error)
 
 	// 供应商关联相关方法
 
 	// GetProvidersByVersionIDs 根据版本ID列表获取供应商列表
 	GetProvidersByVersionIDs(ctx context.Context, versionIDs []int64) ([]ChannelTemplateProvider, error)
+	// GetProviderByNameAndChannel 根据名称和渠道获取供应商
+	GetProviderByNameAndChannel(ctx context.Context, templateID, versionID int64, providerName string, channel string) ([]ChannelTemplateProvider, error)
 }
 
 // channelTemplateDAO 实现了ChannelTemplateDAO接口，提供对模板数据的数据库访问实现
@@ -149,4 +154,26 @@ func (d *channelTemplateDAO) GetProvidersByVersionIDs(ctx context.Context, versi
 		return nil, result.Error
 	}
 	return providers, nil
+}
+
+// GetTemplateVersionByID 根据ID获取模板版本
+func (d *channelTemplateDAO) GetTemplateVersionByID(ctx context.Context, versionID int64) (ChannelTemplateVersion, error) {
+	var version ChannelTemplateVersion
+	err := d.db.WithContext(ctx).Where("id = ?", versionID).First(&version).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ChannelTemplateVersion{}, fmt.Errorf("%w", errs.ErrTemplateVersionNotFound)
+		}
+		return ChannelTemplateVersion{}, err
+	}
+	return version, nil
+}
+
+// GetProviderByNameAndChannel 根据名称和渠道获取已通过审核的供应商
+func (d *channelTemplateDAO) GetProviderByNameAndChannel(ctx context.Context, templateID, versionID int64, providerName, channel string) ([]ChannelTemplateProvider, error) {
+	var providers []ChannelTemplateProvider
+	err := d.db.WithContext(ctx).Model(&ChannelTemplateProvider{}).
+		Where("template_id = ? AND template_version_id = ? AND provider_name = ? AND provider_channel = ? AND audit_status = ?",
+			templateID, versionID, providerName, channel, domain.AuditStatusApproved).Find(&providers).Error
+	return providers, err
 }
