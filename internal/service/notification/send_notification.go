@@ -20,6 +20,8 @@ type SendService interface {
 	SendNotification(ctx context.Context, n domain.Notification) (domain.SendResponse, error)
 	// SendNotificationAsync 异步单条发送
 	SendNotificationAsync(ctx context.Context, n domain.Notification) (domain.SendResponse, error)
+	// BatchSendNotifications 同步批量发送
+	BatchSendNotifications(ctx context.Context, ns ...domain.Notification) (domain.BatchSendResponse, error)
 }
 
 // sendService 执行器实现
@@ -79,4 +81,34 @@ func (e *sendService) SendNotificationAsync(ctx context.Context, n domain.Notifi
 	// 本质上这是一个不怎好的用法，但是业务方可能不清楚，所以我们兼容一下
 	n.ReplaceAsyncImmediate()
 	return e.sendStrategy.Send(ctx, n)
+}
+
+// BatchSendNotifications 同步批量发送
+func (e *sendService) BatchSendNotifications(ctx context.Context, notifications ...domain.Notification) (domain.BatchSendResponse, error) {
+	response := domain.BatchSendResponse{}
+
+	// 参数校验
+	if len(notifications) == 0 {
+		return response, fmt.Errorf("%w: 通知列表不能为空", errs.ErrInvalidParameter)
+	}
+
+	// 校验并且生成 ID
+	for i := range notifications {
+		n := notifications[i]
+		if err := notifications[i].Validate(); err != nil {
+			return domain.BatchSendResponse{}, fmt.Errorf("参数非法 %w", err)
+		}
+		// 生成通知ID
+		id := e.idGenerator.GenerateID(n.BizID, n.Key)
+		notifications[i].ID = uint64(id)
+	}
+
+	// 发送通知，这里有一个隐含的假设，就是发送策略必须是相同的。
+	results, err := e.sendStrategy.BatchSend(ctx, notifications)
+	response.Results = results
+	if err != nil {
+		return response, fmt.Errorf("%w", errs.ErrSendNotificationFailed)
+	}
+	// 从响应获取结果
+	return response, nil
 }

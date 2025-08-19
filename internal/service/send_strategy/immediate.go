@@ -66,3 +66,23 @@ func (s *ImmediateSendStrategy) Send(ctx context.Context, notification domain.No
 	// 再次立即发送
 	return s.sender.Send(ctx, found)
 }
+
+// BatchSend 批量发送通知，其中每个通知的发送策略必须相同
+func (s *ImmediateSendStrategy) BatchSend(ctx context.Context, notifications []domain.Notification) ([]domain.SendResponse, error) {
+	if len(notifications) == 0 {
+		return nil, fmt.Errorf("%w: 通知列表不能为空", errs.ErrInvalidParameter)
+	}
+
+	for i := range notifications {
+		notifications[i].SetSendTime()
+	}
+
+	// 创建通知记录
+	createdNotifications, err := s.repo.BatchCreate(ctx, notifications)
+	if err != nil {
+		// 只要有一个唯一索引冲突整批失败
+		return nil, fmt.Errorf("创建通知失败: %w", err)
+	}
+	// 立即发送
+	return s.sender.BatchSend(ctx, createdNotifications)
+}

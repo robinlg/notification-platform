@@ -3,8 +3,10 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
+	"github.com/ecodeclub/ekit/slice"
 	"github.com/gotomicro/ego/core/elog"
 	"github.com/robinlg/notification-platform/internal/domain"
 	"github.com/robinlg/notification-platform/internal/repository/cache"
@@ -17,6 +19,10 @@ type NotificationRepository interface {
 	Create(ctx context.Context, notification domain.Notification) (domain.Notification, error)
 	// CreateWithCallbackLog 创建单条通知记录，同时创建对应的回调记录
 	CreateWithCallbackLog(ctx context.Context, notification domain.Notification) (domain.Notification, error)
+	// BatchCreate 批量创建通知记录，但不创建对应的回调记录
+	BatchCreate(ctx context.Context, notifications []domain.Notification) ([]domain.Notification, error)
+	// BatchCreateWithCallbackLog 批量创建通知记录，同时创建对应的回调记录
+	BatchCreateWithCallbackLog(ctx context.Context, notifications []domain.Notification) ([]domain.Notification, error)
 	// MarkSuccess 标记通知为成功
 	MarkSuccess(ctx context.Context, entity domain.Notification) error
 	// MarkFailed 标记通知为失败
@@ -27,6 +33,8 @@ type NotificationRepository interface {
 	GetByKey(ctx context.Context, bizID int64, key string) (domain.Notification, error)
 	// CASStatus 更新通知状态
 	CASStatus(ctx context.Context, notification domain.Notification) error
+	// BatchUpdateStatusSucceededOrFailed 批量更新通知状态为成功或失败
+	BatchUpdateStatusSucceededOrFailed(ctx context.Context, succeededNotifications, failedNotifications []domain.Notification) error
 }
 
 const (
@@ -69,6 +77,87 @@ func (r *notificationRepository) Create(ctx context.Context, notification domain
 		return domain.Notification{}, err
 	}
 	return r.toDomain(ds), nil
+}
+
+// BatchCreate 批量创建通知记录，但不创建对应的回调记录
+func (r *notificationRepository) BatchCreate(ctx context.Context, notifications []domain.Notification) ([]domain.Notification, error) {
+	return r.batchCreate(ctx, notifications, false)
+}
+
+func (r *notificationRepository) batchCreate(ctx context.Context, notifications []domain.Notification, createCallbackLog bool) ([]domain.Notification, error) {
+	if len(notifications) == 0 {
+		return nil, nil
+	}
+
+	daoNotifications := slice.Map(notifications, func(_ int, src domain.Notification) dao.Notification {
+		return r.toEntity(src)
+	})
+
+	var createdNotifications []dao.Notification
+	var err error
+	// 扣减库存
+	err = r.mutiDecr(ctx, notifications)
+	if err != nil {
+		return nil, err
+	}
+	if createCallbackLog {
+		createdNotifications, err = r.dao.BatchCreateWithCallbackLog(ctx, daoNotifications)
+		if err != nil {
+			eerr := r.mutiIncr(ctx, notifications)
+			if eerr != nil {
+				elog.Error("发送失败，归还额度失败", elog.FieldErr(eerr))
+			}
+			return nil, err
+		}
+	} else {
+		createdNotifications, err = r.dao.BatchCreate(ctx, daoNotifications)
+		if err != nil {
+			eerr := r.mutiIncr(ctx, notifications)
+			if eerr != nil {
+				elog.Error("发送失败，归还额度失败", elog.FieldErr(eerr))
+			}
+			return nil, err
+		}
+	}
+
+	return slice.Map(createdNotifications, func(_ int, src dao.Notification) domain.Notification {
+		return r.toDomain(src)
+	}), nil
+}
+
+func (r *notificationRepository) mutiDecr(ctx context.Context, notifications []domain.Notification) error {
+	return r.quotaCache.MutiDecr(ctx, r.getItems(notifications))
+}
+
+func (r *notificationRepository) mutiIncr(ctx context.Context, notifications []domain.Notification) error {
+	return r.quotaCache.MutiIncr(ctx, r.getItems(notifications))
+}
+
+func (r *notificationRepository) getItems(notifications []domain.Notification) []cache.IncrItem {
+	notiMap := make(map[string]cache.IncrItem)
+	for idx := range notifications {
+		d := notifications[idx]
+		key := fmt.Sprintf("%d-%s", d.BizID, d.Channel.String())
+		item, ok := notiMap[key]
+		if !ok {
+			item = cache.IncrItem{
+				BizID:   d.BizID,
+				Channel: d.Channel,
+			}
+		}
+		item.Val++
+		notiMap[key] = item
+	}
+	items := make([]cache.IncrItem, 0, len(notiMap))
+	for key := range notiMap {
+		items = append(items, notiMap[key])
+	}
+	return items
+}
+
+// BatchCreateWithCallbackLog 批量创建通知记录，同时创建对应的回调记录
+func (r *notificationRepository) BatchCreateWithCallbackLog(ctx context.Context, notifications []domain.Notification) ([]domain.Notification, error) {
+	return r.batchCreate(ctx, notifications, true)
 }
 
 // CreateWithCallbackLog 创建单条通知记录，同时创建对应的回调记录
@@ -172,4 +261,31 @@ func (r *notificationRepository) GetByKey(ctx context.Context, bizID int64, key 
 // CASStatus 更新通知状态
 func (r *notificationRepository) CASStatus(ctx context.Context, notification domain.Notification) error {
 	return r.dao.CASStatus(ctx, r.toEntity(notification))
+}
+
+// BatchUpdateStatusSucceededOrFailed 批量更新通知状态为成功或失败
+func (r *notificationRepository) BatchUpdateStatusSucceededOrFailed(ctx context.Context, succeededNotifications, failedNotifications []domain.Notification) error {
+	// 转换成功的通知为DAO层的实体
+	successItems := make([]dao.Notification, len(succeededNotifications))
+	for i := range succeededNotifications {
+		successItems[i] = r.toEntity(succeededNotifications[i])
+	}
+
+	// 转换失败的通知为DAO层的实体
+	failedItems := make([]dao.Notification, len(failedNotifications))
+	for i := range failedNotifications {
+		failedItems[i] = r.toEntity(failedNotifications[i])
+	}
+
+	err := r.dao.BatchUpdateStatusSucceededOrFailed(ctx, successItems, failedItems)
+	if err != nil {
+		return err
+	}
+
+	items := r.getItems(failedNotifications)
+	eerr := r.quotaCache.MutiIncr(ctx, items)
+	if eerr != nil {
+		elog.Error("发送失败，归还额度失败", elog.FieldErr(eerr))
+	}
+	return nil
 }

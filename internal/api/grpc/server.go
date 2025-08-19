@@ -16,6 +16,10 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+const (
+	batchSizeLimit = 100
+)
+
 type NotificationServer struct {
 	notificationv1.UnimplementedNotificationServiceServer
 	notificationv1.UnimplementedNotificationQueryServiceServer
@@ -200,4 +204,111 @@ func (s *NotificationServer) SendNotificationAsync(ctx context.Context, req *not
 	// 将结果转换为响应
 	response.NotificationId = result.NotificationID
 	return response, nil
+}
+
+// BatchSendNotifications 处理批量同步发送通知请求
+func (s *NotificationServer) BatchSendNotifications(ctx context.Context, req *notificationv1.BatchSendNotificationsRequest) (*notificationv1.BatchSendNotificationsResponse, error) {
+	// 从metadata中解析Authorization JWT Token
+	bizID, err := jwt.GetBizIDFromContext(ctx)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+
+	// 处理空请求或空通知列表
+	if req == nil || len(req.Notifications) == 0 {
+		return &notificationv1.BatchSendNotificationsResponse{
+			TotalCount:   0,
+			SuccessCount: 0,
+			Results:      []*notificationv1.SendNotificationResponse{},
+		}, nil
+	}
+
+	if len(req.Notifications) > batchSizeLimit {
+		return nil, status.Errorf(codes.InvalidArgument, "%v: %d > %d", errs.ErrBatchSizeOverLimit, len(req.Notifications), batchSizeLimit)
+	}
+
+	var hasError bool
+	results := make([]*notificationv1.SendNotificationResponse, len(req.Notifications))
+	// 构建领域对象
+	notifications := make([]domain.Notification, 0, len(req.Notifications))
+	for i := range req.Notifications {
+		notification, err1 := s.buildNotification(ctx, req.Notifications[i], bizID)
+		if err1 != nil {
+			results[i] = &notificationv1.SendNotificationResponse{
+				ErrorCode:    notificationv1.ErrorCode_INVALID_PARAMETER,
+				ErrorMessage: err1.Error(),
+				Status:       notificationv1.SendStatus_FAILED,
+			}
+			hasError = true
+			continue
+		}
+		notifications = append(notifications, notification)
+	}
+	if hasError {
+		return &notificationv1.BatchSendNotificationsResponse{
+			TotalCount:   int32(len(results)),
+			SuccessCount: int32(0),
+			Results:      results,
+		}, nil
+	}
+
+	// 执行发送
+	responses, err := s.sendSvc.BatchSendNotifications(ctx, notifications...)
+	if err != nil {
+		if s.isSystemError(err) {
+			return nil, status.Errorf(codes.Internal, "%v", err)
+		} else {
+			for i := range results {
+				results[i] = &notificationv1.SendNotificationResponse{
+					ErrorCode:    s.convertToGRPCErrorCode(err),
+					ErrorMessage: err.Error(),
+					Status:       notificationv1.SendStatus_FAILED,
+				}
+			}
+			return &notificationv1.BatchSendNotificationsResponse{
+				TotalCount:   int32(len(results)),
+				SuccessCount: int32(0),
+				Results:      results,
+			}, nil
+		}
+	}
+
+	// 将结果转换为响应
+	const first = 0
+	successCount := int32(0)
+	for i := range responses.Results {
+		results[i] = s.buildGRPCSendResponse(responses.Results[i], nil)
+		if notifications[first].SendStrategyConfig.Type == domain.SendStrategyImmediate &&
+			domain.SendStatusSucceeded == responses.Results[i].Status {
+			successCount++
+		}
+		if notifications[first].SendStrategyConfig.Type != domain.SendStrategyImmediate &&
+			domain.SendStatusPending == responses.Results[i].Status {
+			successCount++
+		}
+	}
+	return &notificationv1.BatchSendNotificationsResponse{
+		TotalCount:   int32(len(results)),
+		SuccessCount: successCount,
+		Results:      results,
+	}, nil
+}
+
+// buildGRPCSendResponse 将领域响应转换为gRPC响应
+func (s *NotificationServer) buildGRPCSendResponse(result domain.SendResponse, err error) *notificationv1.SendNotificationResponse {
+	response := &notificationv1.SendNotificationResponse{
+		NotificationId: result.NotificationID,
+		Status:         s.convertToGRPCSendStatus(result.Status),
+	}
+	// 如果有错误，提取错误代码和消息
+	if err != nil {
+		response.ErrorMessage = err.Error()
+		response.ErrorCode = s.convertToGRPCErrorCode(err)
+
+		// 如果状态不是失败，但有错误，更新状态为失败
+		if response.Status != notificationv1.SendStatus_FAILED {
+			response.Status = notificationv1.SendStatus_FAILED
+		}
+	}
+	return response
 }

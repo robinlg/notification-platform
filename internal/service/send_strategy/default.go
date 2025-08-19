@@ -6,6 +6,7 @@ import (
 
 	"github.com/gotomicro/ego/core/elog"
 	"github.com/robinlg/notification-platform/internal/domain"
+	"github.com/robinlg/notification-platform/internal/errs"
 	"github.com/robinlg/notification-platform/internal/repository"
 	configsvc "github.com/robinlg/notification-platform/internal/service/config"
 )
@@ -55,4 +56,39 @@ func (s *DefaultSendStrategy) needCreateCallbackLog(ctx context.Context, notific
 		return false
 	}
 	return bizConfig.CallbackConfig != nil
+}
+
+func (s *DefaultSendStrategy) batchCreate(ctx context.Context, notifications []domain.Notification) ([]domain.Notification, error) {
+	const first = 0
+	if s.needCreateCallbackLog(ctx, notifications[first]) {
+		return s.repo.BatchCreateWithCallbackLog(ctx, notifications)
+	}
+	return s.repo.BatchCreate(ctx, notifications)
+}
+
+// BatchSend 批量发送通知，其中每个通知的发送策略必须相同
+func (s *DefaultSendStrategy) BatchSend(ctx context.Context, notifications []domain.Notification) ([]domain.SendResponse, error) {
+	if len(notifications) == 0 {
+		return nil, fmt.Errorf("%w: 通知列表不能为空", errs.ErrInvalidParameter)
+	}
+
+	for i := range notifications {
+		notifications[i].SetSendTime()
+	}
+
+	// 创建通知记录
+	createdNotifications, err := s.batchCreate(ctx, notifications)
+	if err != nil {
+		return nil, fmt.Errorf("创建延迟通知失败: %w", err)
+	}
+
+	// 仅创建通知记录，等待定时任务扫描发送
+	responses := make([]domain.SendResponse, len(createdNotifications))
+	for i := range createdNotifications {
+		responses[i] = domain.SendResponse{
+			NotificationID: createdNotifications[i].ID,
+			Status:         createdNotifications[i].Status,
+		}
+	}
+	return responses, nil
 }

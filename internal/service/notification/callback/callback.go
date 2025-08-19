@@ -22,6 +22,7 @@ var _ Service = (*service)(nil)
 
 type Service interface {
 	SendCallbackByNotification(ctx context.Context, notification domain.Notification) error
+	SendCallbackByNotifications(ctx context.Context, notifications []domain.Notification) error
 }
 
 type service struct {
@@ -185,4 +186,41 @@ func (c *service) getStatus(notification domain.Notification) notificationv1.Sen
 		status = notificationv1.SendStatus_SEND_STATUS_UNSPECIFIED
 	}
 	return status
+}
+
+func (c *service) SendCallbackByNotifications(ctx context.Context, notifications []domain.Notification) error {
+	notificationIDs := make([]uint64, 0, len(notifications))
+	mp := make(map[uint64]domain.Notification, len(notifications))
+	for i := range notifications {
+		notificationIDs = append(notificationIDs, notifications[i].ID)
+		mp[notifications[i].ID] = notifications[i]
+	}
+
+	logs, err := c.repo.FindByNotificationIDs(ctx, notificationIDs)
+	if err != nil {
+		// 一个失败整批次失败
+		return err
+	}
+	if len(logs) == len(notifications) {
+		// 全部有通知回调记录，非立即发送
+		return c.sendCallbackAndUpdateCallbackLogs(ctx, logs)
+	}
+
+	for i := range logs {
+		// 删除有回调记录的通知
+		delete(mp, logs[i].Notification.ID)
+	}
+
+	var err1 error
+	if len(logs) != 0 {
+		// 部分有回调记录（调度器调度发送成功后触发）
+		err1 = c.sendCallbackAndUpdateCallbackLogs(ctx, logs)
+	}
+	for k := range mp {
+		// 全部没有回调记录（同步立刻批量发送，或者同步非立刻发送同时没有回调配置）
+		// 部分没有回调记录（调度器调度发送成功后触发）
+		// Client上没有批量接口，这里可以考虑开协程
+		_, err1 = c.sendCallback(ctx, mp[k])
+	}
+	return err1
 }

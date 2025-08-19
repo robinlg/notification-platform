@@ -15,4 +15,6 @@ type IncrItem struct {
 type QuotaCache interface {
 	Incr(ctx context.Context, bizID int64, channel domain.Channel, quota int32) error
 	Decr(ctx context.Context, bizID int64, channel domain.Channel, quota int32) error
+	MutiIncr(ctx context.Context, items []IncrItem) error
+	MutiDecr(ctx context.Context, items []IncrItem) error
 }
