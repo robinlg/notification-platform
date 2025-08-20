@@ -22,6 +22,8 @@ type SendService interface {
 	SendNotificationAsync(ctx context.Context, n domain.Notification) (domain.SendResponse, error)
 	// BatchSendNotifications 同步批量发送
 	BatchSendNotifications(ctx context.Context, ns ...domain.Notification) (domain.BatchSendResponse, error)
+	// BatchSendNotificationsAsync 异步批量发送
+	BatchSendNotificationsAsync(ctx context.Context, ns ...domain.Notification) (domain.BatchSendAsyncResponse, error)
 }
 
 // sendService 执行器实现
@@ -111,4 +113,34 @@ func (e *sendService) BatchSendNotifications(ctx context.Context, notifications 
 	}
 	// 从响应获取结果
 	return response, nil
+}
+
+// BatchSendNotificationsAsync 异步批量发送
+func (e *sendService) BatchSendNotificationsAsync(ctx context.Context, notifications ...domain.Notification) (domain.BatchSendAsyncResponse, error) {
+	// 参数校验
+	if len(notifications) == 0 {
+		return domain.BatchSendAsyncResponse{}, fmt.Errorf("%w: 通知列表不能为空", errs.ErrInvalidParameter)
+	}
+
+	ids := make([]uint64, 0, len(notifications))
+	// 生成 ID，并且进行校验
+	for i := range notifications {
+		if err := notifications[i].Validate(); err != nil {
+			return domain.BatchSendAsyncResponse{}, fmt.Errorf("参数非法 %w", err)
+		}
+		// 生成通知ID
+		id := e.idGenerator.GenerateID(notifications[i].BizID, notifications[i].Key)
+		notifications[i].ID = uint64(id)
+		ids = append(ids, uint64(id))
+		notifications[i].ReplaceAsyncImmediate()
+	}
+
+	// 发送通知，隐含假设这一批的发送策略是一样的。
+	_, err := e.sendStrategy.BatchSend(ctx, notifications)
+	if err != nil {
+		return domain.BatchSendAsyncResponse{}, fmt.Errorf("发送失败 %w", errs.ErrSendNotificationFailed)
+	}
+	return domain.BatchSendAsyncResponse{
+		NotificationIDs: ids,
+	}, nil
 }

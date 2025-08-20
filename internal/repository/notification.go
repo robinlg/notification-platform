@@ -35,6 +35,8 @@ type NotificationRepository interface {
 	CASStatus(ctx context.Context, notification domain.Notification) error
 	// BatchUpdateStatusSucceededOrFailed 批量更新通知状态为成功或失败
 	BatchUpdateStatusSucceededOrFailed(ctx context.Context, succeededNotifications, failedNotifications []domain.Notification) error
+	// FindReadyNotifications 准备好调度发送的通知
+	FindReadyNotifications(ctx context.Context, offset int, limit int) ([]domain.Notification, error)
 }
 
 const (
@@ -288,4 +290,11 @@ func (r *notificationRepository) BatchUpdateStatusSucceededOrFailed(ctx context.
 		elog.Error("发送失败，归还额度失败", elog.FieldErr(eerr))
 	}
 	return nil
+}
+
+func (r *notificationRepository) FindReadyNotifications(ctx context.Context, offset, limit int) ([]domain.Notification, error) {
+	nos, err := r.dao.FindReadyNotifications(ctx, offset, limit)
+	return slice.Map(nos, func(_ int, src dao.Notification) domain.Notification {
+		return r.toDomain(src)
+	}), err
 }

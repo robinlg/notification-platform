@@ -312,3 +312,48 @@ func (s *NotificationServer) buildGRPCSendResponse(result domain.SendResponse, e
 	}
 	return response
 }
+
+// BatchSendNotificationsAsync 处理批量异步发送通知请求
+func (s *NotificationServer) BatchSendNotificationsAsync(ctx context.Context, req *notificationv1.BatchSendNotificationsAsyncRequest) (*notificationv1.BatchSendNotificationsAsyncResponse, error) {
+	// 从metadata中解析Authorization JWT Token
+	bizID, err := jwt.GetBizIDFromContext(ctx)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+
+	// 处理空请求或空通知列表
+	if req == nil || len(req.Notifications) == 0 {
+		return &notificationv1.BatchSendNotificationsAsyncResponse{
+			NotificationIds: []uint64{},
+		}, nil
+	}
+
+	if len(req.Notifications) > batchSizeLimit {
+		return nil, status.Errorf(codes.InvalidArgument, "%v: %d > %d", errs.ErrBatchSizeOverLimit, len(req.Notifications), batchSizeLimit)
+	}
+
+	// 构建领域对象
+	notifications := make([]domain.Notification, 0, len(req.Notifications))
+	for i := range req.Notifications {
+		notification, err1 := s.buildNotification(ctx, req.Notifications[i], bizID)
+		if err1 != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "%v: %#v", err1, req.Notifications[i])
+		}
+		notifications = append(notifications, notification)
+	}
+
+	// 执行发送
+	result, err := s.sendSvc.BatchSendNotificationsAsync(ctx, notifications...)
+	if err != nil {
+		if s.isSystemError(err) {
+			return nil, status.Errorf(codes.Internal, "%v", err)
+		} else {
+			return nil, status.Errorf(codes.InvalidArgument, "批量异步发送失败: %v", err)
+		}
+	}
+
+	// 将结果转换为响应
+	return &notificationv1.BatchSendNotificationsAsyncResponse{
+		NotificationIds: result.NotificationIDs,
+	}, nil
+}

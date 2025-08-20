@@ -69,6 +69,8 @@ type NotificationDAO interface {
 	// successNotifications: 更新为成功状态的通知列表，包含ID、Version和重试次数
 	// failedNotifications: 更新为失败状态的通知列表，包含ID、Version和重试次数
 	BatchUpdateStatusSucceededOrFailed(ctx context.Context, successNotifications, failedNotifications []Notification) error
+	// FindReadyNotifications 准备好调度发送的通知
+	FindReadyNotifications(ctx context.Context, offset, limit int) ([]Notification, error)
 }
 
 // Create 创建单条通知记录，但不创建对应的回调记录
@@ -311,4 +313,14 @@ func (d *notificationDAO) batchMarkSuccess(tx *gorm.DB, successIDs []uint64) err
 			"status": domain.CallbackLogStatusPending.String(),
 			"utime":  now,
 		}).Error
+}
+
+func (d *notificationDAO) FindReadyNotifications(ctx context.Context, offset, limit int) ([]Notification, error) {
+	var res []Notification
+	now := time.Now().UnixMilli()
+	err := d.db.WithContext(ctx).
+		Where("scheduled_stime <=? AND scheduled_etime >= ? AND status=?", now, now, domain.SendStatusPending.String()).
+		Limit(limit).Offset(offset).
+		Find(&res).Error
+	return res, err
 }
