@@ -14,6 +14,7 @@ import (
 	reflect "reflect"
 
 	domain "github.com/robinlg/notification-platform/internal/domain"
+	provider "github.com/robinlg/notification-platform/internal/service/provider"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -76,6 +77,132 @@ func (c *MockProviderSendCall) Do(f func(context.Context, domain.Notification) (
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
 func (c *MockProviderSendCall) DoAndReturn(f func(context.Context, domain.Notification) (domain.SendResponse, error)) *MockProviderSendCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
+// MockSelector is a mock of Selector interface.
+type MockSelector struct {
+	ctrl     *gomock.Controller
+	recorder *MockSelectorMockRecorder
+	isgomock struct{}
+}
+
+// MockSelectorMockRecorder is the mock recorder for MockSelector.
+type MockSelectorMockRecorder struct {
+	mock *MockSelector
+}
+
+// NewMockSelector creates a new mock instance.
+func NewMockSelector(ctrl *gomock.Controller) *MockSelector {
+	mock := &MockSelector{ctrl: ctrl}
+	mock.recorder = &MockSelectorMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockSelector) EXPECT() *MockSelectorMockRecorder {
+	return m.recorder
+}
+
+// Next mocks base method.
+func (m *MockSelector) Next(ctx context.Context, notification domain.Notification) (provider.Provider, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Next", ctx, notification)
+	ret0, _ := ret[0].(provider.Provider)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Next indicates an expected call of Next.
+func (mr *MockSelectorMockRecorder) Next(ctx, notification any) *MockSelectorNextCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Next", reflect.TypeOf((*MockSelector)(nil).Next), ctx, notification)
+	return &MockSelectorNextCall{Call: call}
+}
+
+// MockSelectorNextCall wrap *gomock.Call
+type MockSelectorNextCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockSelectorNextCall) Return(arg0 provider.Provider, arg1 error) *MockSelectorNextCall {
+	c.Call = c.Call.Return(arg0, arg1)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockSelectorNextCall) Do(f func(context.Context, domain.Notification) (provider.Provider, error)) *MockSelectorNextCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockSelectorNextCall) DoAndReturn(f func(context.Context, domain.Notification) (provider.Provider, error)) *MockSelectorNextCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
+// MockSelectorBuilder is a mock of SelectorBuilder interface.
+type MockSelectorBuilder struct {
+	ctrl     *gomock.Controller
+	recorder *MockSelectorBuilderMockRecorder
+	isgomock struct{}
+}
+
+// MockSelectorBuilderMockRecorder is the mock recorder for MockSelectorBuilder.
+type MockSelectorBuilderMockRecorder struct {
+	mock *MockSelectorBuilder
+}
+
+// NewMockSelectorBuilder creates a new mock instance.
+func NewMockSelectorBuilder(ctrl *gomock.Controller) *MockSelectorBuilder {
+	mock := &MockSelectorBuilder{ctrl: ctrl}
+	mock.recorder = &MockSelectorBuilderMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockSelectorBuilder) EXPECT() *MockSelectorBuilderMockRecorder {
+	return m.recorder
+}
+
+// Build mocks base method.
+func (m *MockSelectorBuilder) Build() (provider.Selector, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Build")
+	ret0, _ := ret[0].(provider.Selector)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Build indicates an expected call of Build.
+func (mr *MockSelectorBuilderMockRecorder) Build() *MockSelectorBuilderBuildCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Build", reflect.TypeOf((*MockSelectorBuilder)(nil).Build))
+	return &MockSelectorBuilderBuildCall{Call: call}
+}
+
+// MockSelectorBuilderBuildCall wrap *gomock.Call
+type MockSelectorBuilderBuildCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockSelectorBuilderBuildCall) Return(arg0 provider.Selector, arg1 error) *MockSelectorBuilderBuildCall {
+	c.Call = c.Call.Return(arg0, arg1)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockSelectorBuilderBuildCall) Do(f func() (provider.Selector, error)) *MockSelectorBuilderBuildCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockSelectorBuilderBuildCall) DoAndReturn(f func() (provider.Selector, error)) *MockSelectorBuilderBuildCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

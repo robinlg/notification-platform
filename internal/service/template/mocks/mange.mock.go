@@ -79,3 +79,42 @@ func (c *MockChannelTemplateServiceGetTemplateByIDCall) DoAndReturn(f func(conte
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
+
+// GetTemplateByIDAndProviderInfo mocks base method.
+func (m *MockChannelTemplateService) GetTemplateByIDAndProviderInfo(ctx context.Context, templateID int64, providerName string, channel domain.Channel) (domain.ChannelTemplate, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetTemplateByIDAndProviderInfo", ctx, templateID, providerName, channel)
+	ret0, _ := ret[0].(domain.ChannelTemplate)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetTemplateByIDAndProviderInfo indicates an expected call of GetTemplateByIDAndProviderInfo.
+func (mr *MockChannelTemplateServiceMockRecorder) GetTemplateByIDAndProviderInfo(ctx, templateID, providerName, channel any) *MockChannelTemplateServiceGetTemplateByIDAndProviderInfoCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTemplateByIDAndProviderInfo", reflect.TypeOf((*MockChannelTemplateService)(nil).GetTemplateByIDAndProviderInfo), ctx, templateID, providerName, channel)
+	return &MockChannelTemplateServiceGetTemplateByIDAndProviderInfoCall{Call: call}
+}
+
+// MockChannelTemplateServiceGetTemplateByIDAndProviderInfoCall wrap *gomock.Call
+type MockChannelTemplateServiceGetTemplateByIDAndProviderInfoCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockChannelTemplateServiceGetTemplateByIDAndProviderInfoCall) Return(arg0 domain.ChannelTemplate, arg1 error) *MockChannelTemplateServiceGetTemplateByIDAndProviderInfoCall {
+	c.Call = c.Call.Return(arg0, arg1)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockChannelTemplateServiceGetTemplateByIDAndProviderInfoCall) Do(f func(context.Context, int64, string, domain.Channel) (domain.ChannelTemplate, error)) *MockChannelTemplateServiceGetTemplateByIDAndProviderInfoCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockChannelTemplateServiceGetTemplateByIDAndProviderInfoCall) DoAndReturn(f func(context.Context, int64, string, domain.Channel) (domain.ChannelTemplate, error)) *MockChannelTemplateServiceGetTemplateByIDAndProviderInfoCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}

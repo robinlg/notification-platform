@@ -40,45 +40,6 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 	return m.recorder
 }
 
-// CreateTemplate mocks base method.
-func (m *MockClient) CreateTemplate(req client.CreateTemplateReq) (client.CreateTemplateResp, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateTemplate", req)
-	ret0, _ := ret[0].(client.CreateTemplateResp)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// CreateTemplate indicates an expected call of CreateTemplate.
-func (mr *MockClientMockRecorder) CreateTemplate(req any) *MockClientCreateTemplateCall {
-	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateTemplate", reflect.TypeOf((*MockClient)(nil).CreateTemplate), req)
-	return &MockClientCreateTemplateCall{Call: call}
-}
-
-// MockClientCreateTemplateCall wrap *gomock.Call
-type MockClientCreateTemplateCall struct {
-	*gomock.Call
-}
-
-// Return rewrite *gomock.Call.Return
-func (c *MockClientCreateTemplateCall) Return(arg0 client.CreateTemplateResp, arg1 error) *MockClientCreateTemplateCall {
-	c.Call = c.Call.Return(arg0, arg1)
-	return c
-}
-
-// Do rewrite *gomock.Call.Do
-func (c *MockClientCreateTemplateCall) Do(f func(client.CreateTemplateReq) (client.CreateTemplateResp, error)) *MockClientCreateTemplateCall {
-	c.Call = c.Call.Do(f)
-	return c
-}
-
-// DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockClientCreateTemplateCall) DoAndReturn(f func(client.CreateTemplateReq) (client.CreateTemplateResp, error)) *MockClientCreateTemplateCall {
-	c.Call = c.Call.DoAndReturn(f)
-	return c
-}
-
 // Send mocks base method.
 func (m *MockClient) Send(req client.SendReq) (client.SendResp, error) {
 	m.ctrl.T.Helper()
