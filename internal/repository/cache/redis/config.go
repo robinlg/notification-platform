@@ -79,6 +79,49 @@ func (c *Cache) SetConfigs(ctx context.Context, configs []domain.BusinessConfig)
 	return nil
 }
 
+func (c *Cache) GetConfigs(ctx context.Context, bizIDs []int64) (map[int64]domain.BusinessConfig, error) {
+	if len(bizIDs) == 0 {
+		return make(map[int64]domain.BusinessConfig), nil
+	}
+
+	// 准备所有的键
+	keys := make([]string, len(bizIDs))
+	for i, bizID := range bizIDs {
+		keys[i] = cache.ConfigKey(bizID)
+	}
+
+	// 使用 MGET 批量获取数据
+	vals, err := c.rdb.MGet(ctx, keys...).Result()
+	if err != nil {
+		return nil, fmt.Errorf("redis执行MGET失败: %w", err)
+	}
+
+	// 处理结果
+	result := make(map[int64]domain.BusinessConfig)
+	for i, val := range vals {
+		if val == nil {
+			// 这个键不存在，跳过
+			continue
+		}
+
+		// 将字符串转换为结构体
+		strVal, ok := val.(string)
+		if !ok {
+			continue
+		}
+
+		var cfg domain.BusinessConfig
+		if err := json.Unmarshal([]byte(strVal), &cfg); err != nil {
+			// 解析错误，记录错误但继续处理其他配置
+			c.logger.Error("从redis序列化数据失败", elog.Any("err", err), elog.String("key", keys[i]), elog.String("val", strVal))
+			continue
+		}
+		result[bizIDs[i]] = cfg
+	}
+
+	return result, nil
+}
+
 func (c *Cache) Set(ctx context.Context, cfg domain.BusinessConfig) error {
 	key := cache.ConfigKey(cfg.ID)
 

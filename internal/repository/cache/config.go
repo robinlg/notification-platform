@@ -19,6 +19,7 @@ const (
 type ConfigCache interface {
 	Get(ctx context.Context, bizID int64) (domain.BusinessConfig, error)
 	Set(ctx context.Context, cfg domain.BusinessConfig) error
+	GetConfigs(ctx context.Context, bizIDs []int64) (map[int64]domain.BusinessConfig, error)
 	SetConfigs(ctx context.Context, configs []domain.BusinessConfig) error
 }
 

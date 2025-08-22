@@ -128,6 +128,97 @@ func (b *businessConfigRepository) GetByID(ctx context.Context, id int64) (domai
 	return domainConfig, nil
 }
 
+// GetByIDs 根据多个ID批量获取业务配置
+// 用在异步请求调度的时候批量处理，批量执行，批量发送
+func (b *businessConfigRepository) GetByIDs(ctx context.Context, ids []int64) (map[int64]domain.BusinessConfig, error) {
+	// 有两种思路，一种是整体从本地缓存，redis 缓存，数据库中取
+	// 另外一种是从本地缓存取，没取到的从 Redis 取，再没取到的，从数据库中取.
+	// 1. 先从本地缓存批量获取
+	result, err := b.localCache.GetConfigs(ctx, ids)
+	if err != nil {
+		b.logger.Error("从本地缓存批量获取失败", elog.FieldErr(err))
+		// 初始化 map，要注意指定容量，规避扩容引发的性能问题
+		result = make(map[int64]domain.BusinessConfig, len(ids))
+	}
+	// 这边就是要尝试从 Redis 里面取
+	// 取 result 当中没有的
+
+	// 叠加可用性的设计，只查询本地缓存
+	// if ctx.Value("downgrade") == true {
+	//	return result, err
+	// }
+
+	missedIDs := b.diffIDs(ids, result)
+	if len(missedIDs) == 0 {
+		// 一个都不缺，全找到了
+		return result, nil
+	}
+	// 2. 从 Redis 里面获取
+	// 相比之下可能需要查询更少的数据，Redis 传输的数据量也更少，性能会更好
+	redisConfigs, err := b.redisCache.GetConfigs(ctx, missedIDs)
+	if err != nil {
+		b.logger.Error("从 Redis 中批量获取失败", elog.FieldErr(err))
+	} else {
+		// 尝试回写 local cache
+		// 需要回写的，以及合并 redisConfigs 和 result
+		// 这个是精确控制
+		configToLocalCache := make([]domain.BusinessConfig, 0, len(redisConfigs))
+		for id, conf := range redisConfigs {
+			result[id] = conf
+			configToLocalCache = append(configToLocalCache, conf)
+		}
+		// 全部回写，问题不大
+		// b.localCache.SetConfigs(ctx, mapx.Values(result))
+		err = b.localCache.SetConfigs(ctx, configToLocalCache)
+		if err != nil {
+			b.logger.Error("批量回写本地缓存失败", elog.FieldErr(err))
+		}
+	}
+
+	// 叠加可用性的设计，查询 Redis 但是不查询数据库
+	// if ctx.Value("downgrade") == true {
+	// if ctx.Value("rate_limit") == true {
+	// if ctx.Value("high_load") == true {
+	//	return result, err
+	// }
+
+	// 从数据库中获取缓存未找到的配置
+	missedIDs = b.diffIDs(ids, result)
+	// 精确控制，查询更少的 id，回表更少的次数
+	configMap, err := b.dao.GetByIDs(ctx, missedIDs)
+	if err != nil {
+		return nil, err
+	}
+	// 处理 configMap。回写 redis，回写本地缓存
+	configs := make([]domain.BusinessConfig, 0, len(configMap))
+	for id := range configMap {
+		configs = append(configs, b.toDomain(configMap[id]))
+	}
+
+	if len(configs) > 0 {
+		err = b.localCache.SetConfigs(ctx, configs)
+		if err != nil {
+			b.logger.Error("批量回写本地缓存失败", elog.FieldErr(err))
+		}
+
+		err = b.redisCache.SetConfigs(ctx, configs)
+		if err != nil {
+			b.logger.Error("批量回写 Redis 缓存失败", elog.FieldErr(err))
+		}
+	}
+	return result, nil
+}
+
+func (b *businessConfigRepository) diffIDs(ids []int64, m map[int64]domain.BusinessConfig) []int64 {
+	res := make([]int64, 0, len(ids))
+	for _, id := range ids {
+		if _, ok := m[id]; !ok {
+			res = append(res, id)
+		}
+	}
+	return res
+}
+
 func (b *businessConfigRepository) toDomain(config dao.BusinessConfig) domain.BusinessConfig {
 	domainCfg := domain.BusinessConfig{
 		ID:        config.ID,

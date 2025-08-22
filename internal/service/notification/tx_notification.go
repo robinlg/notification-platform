@@ -48,6 +48,8 @@ func NewTxNotificationService(
 	}
 }
 
+const defaultBatchSize = 10
+
 func (t *txNotificationService) Prepare(ctx context.Context, notification domain.Notification) (uint64, error) {
 	// todo
 	notification.Status = domain.SendStatusPrepare

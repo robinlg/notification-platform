@@ -9,7 +9,9 @@ import (
 
 type TxNotificationRepository interface {
 	Create(ctx context.Context, notification domain.TxNotification) (uint64, error)
+	FindCheckBack(ctx context.Context, offset, limit int) ([]domain.TxNotification, error)
 	UpdateStatus(ctx context.Context, bizID int64, key string, status domain.TxNotificationStatus, notificationStatus domain.SendStatus) error
+	UpdateCheckStatus(ctx context.Context, txNotifications []domain.TxNotification, notificationStatus domain.SendStatus) error
 }
 
 type txNotificationRepo struct {
@@ -31,9 +33,36 @@ func (t *txNotificationRepo) Create(ctx context.Context, txn domain.TxNotificati
 	return t.txdao.Prepare(ctx, txnEntity, notificationEntity)
 }
 
+func (t *txNotificationRepo) FindCheckBack(ctx context.Context, offset, limit int) ([]domain.TxNotification, error) {
+	// 调用DAO层查询记录
+	daoNotifications, err := t.txdao.FindCheckBack(ctx, offset, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	// 将DAO对象列表转换为领域模型列表
+	result := make([]domain.TxNotification, 0, len(daoNotifications))
+	for _, daoNotification := range daoNotifications {
+		result = append(result, t.toDomain(daoNotification))
+	}
+	return result, nil
+}
+
 func (t *txNotificationRepo) UpdateStatus(ctx context.Context, bizID int64, key string, status domain.TxNotificationStatus, notificationStatus domain.SendStatus) error {
 	// 直接调用DAO层更新状态
 	return t.txdao.UpdateStatus(ctx, bizID, key, status, notificationStatus)
+}
+
+func (t *txNotificationRepo) UpdateCheckStatus(ctx context.Context, txNotifications []domain.TxNotification, notificationStatus domain.SendStatus) error {
+	// 将领域模型列表转换为DAO对象列表
+	daoNotifications := make([]dao.TxNotification, 0, len(txNotifications))
+	for idx := range txNotifications {
+		txNotification := txNotifications[idx]
+		daoNotifications = append(daoNotifications, t.toDao(txNotification))
+	}
+
+	// 调用DAO层更新检查状态
+	return t.txdao.UpdateCheckStatus(ctx, daoNotifications, notificationStatus)
 }
 
 // toEntity 将领域对象转换为DAO实体

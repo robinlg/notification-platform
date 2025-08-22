@@ -14,6 +14,7 @@ import (
 //go:generate mockgen -source=./config.go -destination=./mocks/config.mock.go -package=configmocks -typed BusinessConfigService
 type BusinessConfigService interface {
 	GetByID(ctx context.Context, id int64) (domain.BusinessConfig, error)
+	GetByIDs(ctx context.Context, ids []int64) (map[int64]domain.BusinessConfig, error)
 }
 
 type BusinessConfigServiceV1 struct {
@@ -44,4 +45,15 @@ func (b *BusinessConfigServiceV1) GetByID(ctx context.Context, id int64) (domain
 	}
 
 	return config, nil
+}
+
+// GetByIDs 根据多个ID批量获取业务配置
+func (b *BusinessConfigServiceV1) GetByIDs(ctx context.Context, ids []int64) (map[int64]domain.BusinessConfig, error) {
+	// 参数校验
+	if len(ids) == 0 {
+		return make(map[int64]domain.BusinessConfig), nil
+	}
+
+	// 调用仓库层方法
+	return b.repo.GetByIDs(ctx, ids)
 }

@@ -407,3 +407,15 @@ func (s *NotificationServer) TxCommit(ctx context.Context, request *notification
 	err = s.txnSvc.Commit(ctx, bizID, request.GetKey())
 	return &notificationv1.TxCommitResponse{}, err
 }
+
+// TxCancel 处理事务通知取消请求
+func (s *NotificationServer) TxCancel(ctx context.Context, request *notificationv1.TxCancelRequest) (*notificationv1.TxCancelResponse, error) {
+	// 从metadata中解析Authorization JWT Token
+	bizID, err := jwt.GetBizIDFromContext(ctx)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	// 执行操作
+	err = s.txnSvc.Cancel(ctx, bizID, request.GetKey())
+	return &notificationv1.TxCancelResponse{}, err
+}

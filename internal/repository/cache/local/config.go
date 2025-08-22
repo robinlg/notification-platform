@@ -35,6 +35,21 @@ func (l *Cache) Get(_ context.Context, bizID int64) (domain.BusinessConfig, erro
 	return vv, nil
 }
 
+func (l *Cache) GetConfigs(_ context.Context, bizIDs []int64) (map[int64]domain.BusinessConfig, error) {
+	configMap := make(map[int64]domain.BusinessConfig)
+	for _, bizID := range bizIDs {
+		v, ok := l.c.Get(cache.ConfigKey(bizID))
+		if ok {
+			vv, ok := v.(domain.BusinessConfig)
+			if !ok {
+				return configMap, errors.New("数据类型不正确")
+			}
+			configMap[bizID] = vv
+		}
+	}
+	return configMap, nil
+}
+
 func (l *Cache) SetConfigs(_ context.Context, configs []domain.BusinessConfig) error {
 	for _, config := range configs {
 		l.c.Set(cache.ConfigKey(config.ID), config, cache.DefaultExpiredTime)
