@@ -26,6 +26,7 @@ type NotificationServer struct {
 
 	sendSvc     notificationsvc.SendService
 	templateSvc templatesvc.ChannelTemplateService
+	txnSvc      notificationsvc.TxNotificationService
 }
 
 func (s *NotificationServer) SendNotification(ctx context.Context, req *notificationv1.SendNotificationRequest) (*notificationv1.SendNotificationResponse, error) {
@@ -356,4 +357,53 @@ func (s *NotificationServer) BatchSendNotificationsAsync(ctx context.Context, re
 	return &notificationv1.BatchSendNotificationsAsyncResponse{
 		NotificationIds: result.NotificationIDs,
 	}, nil
+}
+
+// TxPrepare 处理事务通知准备请求
+func (s *NotificationServer) TxPrepare(ctx context.Context, request *notificationv1.TxPrepareRequest) (*notificationv1.TxPrepareResponse, error) {
+	// 从metadata中解析Authorization JWT Token
+	bizID, err := jwt.GetBizIDFromContext(ctx)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+
+	// 构建领域对象
+	txn, err := s.buildTxNotification(ctx, request.Notification, bizID)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "无效的请求参数: %v", err)
+	}
+
+	// 执行操作
+	_, err = s.txnSvc.Prepare(ctx, txn.Notification)
+	return &notificationv1.TxPrepareResponse{}, err
+}
+
+func (s *NotificationServer) buildTxNotification(ctx context.Context, n *notificationv1.Notification, bizID int64) (domain.TxNotification, error) {
+	if n == nil {
+		return domain.TxNotification{}, errors.New("通知不能为空")
+	}
+
+	// 构建基本Notification
+	noti, err := s.buildNotification(ctx, n, bizID)
+	noti.Status = domain.SendStatusPrepare
+	if err != nil {
+		return domain.TxNotification{}, status.Errorf(codes.InvalidArgument, "无效的请求参数: %v", err)
+	}
+	return domain.TxNotification{
+		BizID:        bizID,
+		Key:          n.Key,
+		Notification: noti,
+		Status:       domain.TxNotificationStatusPrepare,
+	}, nil
+}
+
+// TxCommit 处理事务通知提交请求
+func (s *NotificationServer) TxCommit(ctx context.Context, request *notificationv1.TxCommitRequest) (*notificationv1.TxCommitResponse, error) {
+	// 从metadata中解析Authorization JWT Token
+	bizID, err := jwt.GetBizIDFromContext(ctx)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	err = s.txnSvc.Commit(ctx, bizID, request.GetKey())
+	return &notificationv1.TxCommitResponse{}, err
 }
